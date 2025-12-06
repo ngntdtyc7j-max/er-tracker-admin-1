@@ -8,13 +8,19 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 $client_id = (int)$_GET['id'];
 
 $message = '';
+$error   = '';
+
+function generateLicenseKey(): string {
+    // 32-char hex key (can tweak format later if you want pretty groups)
+    return strtoupper(bin2hex(random_bytes(16)));
+}
 
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Update client core details
-    if (isset($_POST['action']) && $_POST['action'] === 'update_client') {
-        $status = $_POST['status'] === 'suspended' ? 'suspended' : 'active';
+    if (($_POST['action'] ?? '') === 'update_client') {
+        $status = ($_POST['status'] ?? 'active') === 'suspended' ? 'suspended' : 'active';
         $expiry_date = $_POST['expiry_date'] ?? date('Y-m-d');
         $notes = $_POST['notes'] ?? '';
 
@@ -25,8 +31,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = 'Client details updated.';
     }
 
+    // Generate / regenerate license key
+    if (($_POST['action'] ?? '') === 'generate_license') {
+        $license_expiry = $_POST['license_expiry_date'] ?? '';
+
+        if ($license_expiry === '') {
+            $error = 'Please choose a license expiry date.';
+        } else {
+            $license_key = generateLicenseKey();
+
+            $stmt = $conn->prepare("UPDATE clients SET license_key = ?, license_expiry_date = ? WHERE id = ?");
+            $stmt->bind_param('ssi', $license_key, $license_expiry, $client_id);
+            $stmt->execute();
+
+            $message = 'License key generated.';
+        }
+    }
+
     // Add authorised user
-    if (isset($_POST['action']) && $_POST['action'] === 'add_auth_user') {
+    if (($_POST['action'] ?? '') === 'add_auth_user') {
         $full_name = trim($_POST['full_name'] ?? '');
         if ($full_name !== '') {
             $email = trim($_POST['email'] ?? '');
@@ -40,11 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param('issss', $client_id, $full_name, $email, $phone, $role_label);
             $stmt->execute();
             $message = 'Authorised user added.';
+        } else {
+            $error = 'Full name is required for an authorised user.';
         }
     }
 
     // Toggle authorised user active/inactive
-    if (isset($_POST['action']) && $_POST['action'] === 'toggle_auth_user') {
+    if (($_POST['action'] ?? '') === 'toggle_auth_user') {
         $auth_id = (int)($_POST['auth_id'] ?? 0);
         $is_active = (int)($_POST['is_active'] ?? 0);
 
@@ -101,6 +126,9 @@ $authUsers = $stmt->get_result();
   <?php if ($message): ?>
     <p class="alert-success"><?= e($message) ?></p>
   <?php endif; ?>
+  <?php if ($error): ?>
+    <p class="alert-error"><?= e($error) ?></p>
+  <?php endif; ?>
 
   <!-- Client core details -->
   <h2 class="section-title">Account</h2>
@@ -117,7 +145,7 @@ $authUsers = $stmt->get_result();
     </div>
 
     <div class="form-row">
-      <label>Expiry Date</label>
+      <label>Contract / Account Expiry Date</label>
       <input type="date" name="expiry_date" value="<?= e($client['expiry_date']) ?>">
       <div class="small-note">Represents when their subscription / contract expires.</div>
     </div>
@@ -129,6 +157,38 @@ $authUsers = $stmt->get_result();
 
     <button type="submit" class="btn-primary mt-2">Save Client Changes</button>
   </form>
+
+  <!-- License Key -->
+  <h2 class="section-title">License</h2>
+
+  <div class="mb-3">
+    <div class="form-row">
+      <label>Current License Key</label>
+      <?php if (!empty($client['license_key'])): ?>
+        <div class="code-box"><?= e($client['license_key']) ?></div>
+      <?php else: ?>
+        <div class="small-note">No license key has been generated yet.</div>
+      <?php endif; ?>
+    </div>
+
+    <div class="form-row">
+      <label>License Expiry Date</label>
+      <input type="date" value="<?= e($client['license_expiry_date']) ?>" disabled>
+      <div class="small-note">This is the expiry of the license key itself (separate from contract expiry).</div>
+    </div>
+
+    <form method="post" class="mt-2">
+      <input type="hidden" name="action" value="generate_license">
+      <div class="form-row">
+        <label>New License Expiry Date</label>
+        <input type="date" name="license_expiry_date" required>
+        <div class="small-note">
+          Generating a new license key will replace any existing key and set this new expiry date.
+        </div>
+      </div>
+      <button type="submit" class="btn-primary mt-2">Generate License Key</button>
+    </form>
+  </div>
 
   <!-- Authorised users -->
   <h2 class="section-title">Authorised Users</h2>

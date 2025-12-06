@@ -181,6 +181,18 @@ body {
   margin-top: 6px;
 }
 
+/* ===== Code / license display ===== */
+.code-box {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #1a2249;
+  background: #0b1026;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
 /* ===== Layout helpers ===== */
 .mt-2 { margin-top: 8px; }
 .mt-3 { margin-top: 12px; }
